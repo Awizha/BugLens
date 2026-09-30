@@ -1,35 +1,75 @@
-# Issue Investigator
+# BugLens 🔎
 
-A Python command-line agent that investigates bug reports by inspecting a local Python project. It uses OpenRouter to choose tools, gather code evidence, and suggest an explanation and fix.
+An AI-assisted bug investigator for Python projects, with a local web interface and GitHub integration.
 
-The agent recommends changes; it does not modify or execute the inspected code.
+Give BugLens a public GitHub repository and a bug description—or a GitHub issue URL. It inspects source code using file tools, gathers evidence, and recommends a likely cause, a fix, and a test.
 
-## How it works
-
-1. The user describes a bug.
-2. The model requests tools to list Python files, read numbered source code, or search for keywords.
-3. Python runs the requested tools and returns their results to the model.
-4. The model continues investigating or returns its findings.
-
-Investigations are limited to eight model requests and twelve tool calls.
+**BugLens reads code. It does not execute the inspected project, apply fixes, or verify that suggested fixes work.**
 
 ## Features
 
-- Searches Python files, including files in subfolders.
-- Reads source code with line numbers.
-- Investigates issues spanning multiple files.
-- Produces suggested fixes and tests with supporting code references.
-- Prompts the model to acknowledge missing evidence.
-- Restricts file access to the `sample_project` directory.
-- Handles common file errors, connection failures, and API rate limits.
+- **GitHub repository import:** downloads a snapshot of the repository’s default branch.
+- **GitHub issue import:** reads an issue’s title and description.
+- **Tool-driven investigation:** the model chooses when to list files, read code, and search for keywords.
+- **Source references:** numbered code helps the model cite supporting files and lines.
+- **Web and terminal interfaces:** use the Streamlit app or investigate the local sample project from the terminal.
+- **Progress display:** see investigation rounds and tool requests.
+- **Project isolation:** each investigation’s tools are restricted to its selected folder.
+- **Bounded investigations:** at most eight model requests and twelve tool calls.
+- **Temporary downloads:** downloaded source files are removed when the download context exits.
+
+## How it works
+
+```text
+Repository URL + bug description
+             OR
+        GitHub issue URL
+              ↓
+    Import the bug report
+              ↓
+Download a repository snapshot
+              ↓
+    AI requests a file tool
+              ↓
+Python runs the tool and returns its result
+              ↓
+ Repeat until findings or a limit is reached
+              ↓
+ Display recommendations and remove temporary files
+```
+
+The model requests tools; Python executes those requests through an allowed tool registry.
+
+Available tools:
+
+| Tool | Purpose |
+|---|---|
+| `list_python_files` | Find Python files in the selected project. |
+| `read_code` | Read a Python file with numbered lines. |
+| `search_code` | Find lines containing a keyword across Python files. |
+
+The web and terminal interfaces share the investigation function in `agent.py`.
+
+## Tech stack
+
+- Python 3.12
+- Streamlit
+- OpenRouter
+- Requests
+- python-dotenv
+- Python’s built-in `unittest` framework
+
+The current model setting is `openrouter/free`. The underlying model can vary between requests, so results are not guaranteed to be consistent.
 
 ## Setup
 
-Developed and tested with Python 3.12.
+### 1. Download the project
 
-Download or clone this repository, then open a terminal in its root directory.
+Clone this repository using the URL shown in GitHub’s **Code** menu, or download and extract its ZIP archive.
 
-Create a virtual environment:
+Open a terminal in the project’s root directory.
+
+### 2. Create a virtual environment
 
 ```bash
 python3 -m venv .venv
@@ -41,108 +81,232 @@ Activate it on macOS or Linux:
 source .venv/bin/activate
 ```
 
-Or on Windows PowerShell:
+On Windows PowerShell:
 
 ```powershell
 .venv\Scripts\Activate.ps1
 ```
 
-Install the dependencies:
+### 3. Install dependencies
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Copy `.env.example` to a new file named `.env` and replace the placeholder with your OpenRouter API key:
+### 4. Configure the API key
+
+Create an API key in [OpenRouter](https://openrouter.ai/settings/keys).
+
+Copy `.env.example` to a file named `.env`, then replace the placeholder:
 
 ```dotenv
 OPENROUTER_API_KEY=your_key_here
 ```
 
-Never commit your actual API key.
+Keep `.env` private. It is excluded by `.gitignore`.
 
-## Run
+An OpenRouter key is required for AI investigations. Public GitHub imports currently use unauthenticated requests; no GitHub token is required.
 
-From the repository root:
+## Run the web interface
+
+```bash
+python -m streamlit run app.py --server.address 127.0.0.1
+```
+
+Open:
+
+```text
+http://127.0.0.1:8501
+```
+
+Keep the terminal running while using the app. Press `Ctrl+C` in that terminal to stop it.
+
+### Investigate a repository
+
+1. Enter a public GitHub repository URL.
+2. Describe the bug, including expected and actual behaviour.
+3. Click **Investigate**.
+4. Review the progress and resulting recommendations.
+
+Example report for the included sample code:
+
+```text
+In sample_project/registration.py, the app crashes when the username is empty.
+```
+
+### Investigate a GitHub issue
+
+1. Enter a URL in this format:
+
+   ```text
+   https://github.com/OWNER/REPOSITORY/issues/NUMBER
+   ```
+
+2. Leave the bug-description field blank to use the issue’s title and description.
+3. Optionally enter additional context in that field.
+4. Click **Investigate**.
+5. Expand **Bug report used** to inspect the imported report.
+
+Issue comments and attachments are not imported. Pull requests are not supported as issue inputs.
+
+The app inspects the latest commit on the repository’s default branch. It does not automatically identify the historical code version associated with an issue.
+
+### Local hosting
+
+The launch command binds the app to your own computer.
+
+Publishing this repository on GitHub does not deploy the web app. Public hosting would require additional decisions about authentication, API-key management, usage limits, and concurrent requests.
+
+## Run the terminal interface
 
 ```bash
 python investigate.py
 ```
 
-Example bug reports:
+The terminal interface investigates the local `sample_project` folder.
+
+Example reports:
 
 ```text
 The app crashes when the username is empty.
 ```
 
 ```text
-A checkout for a £100 item should apply a 20% discount and return £80, but checkout_total(100) returns £99.80. Why?
+A checkout for a £100 item should apply a 20% discount and return £80,
+but checkout_total(100) returns £99.80. Why?
 ```
 
-The files in `sample_project` contain intentional bugs for demonstrating the investigator.
+The bugs in `sample_project` are intentional demonstration cases.
 
-## Example investigation
+## Example finding
 
-For the checkout report, one observed run:
+For the checkout report, an observed investigation connected two files:
 
-1. Listed the Python files.
-2. Read `checkout.py` and `discounts.py`.
-3. Identified that checkout passed `0.20`, while the discount function divided its argument by `100`.
-4. Suggested passing `20` to represent a 20% discount.
+- `checkout.py` passed `0.20` as the discount.
+- `discounts.py` divided that argument by `100`.
 
-The investigator explained the calculation:
+The agent explained the result:
 
 ```text
 100 × (1 − 0.20 / 100) = 99.80
+```
+
+It recommended passing `20` to represent a 20% discount:
+
+```text
 100 × (1 − 20 / 100) = 80.00
 ```
 
-This was a suggested correction, not a fix executed by the agent.
+This was a recommendation based on source inspection. BugLens did not execute the calculation or apply the change.
 
-## Tests
+## Tests and validation
 
-Run the automated tool tests:
+Run the automated tests:
 
 ```bash
-python -m unittest test_tools -v
+python -m unittest test_tools test_github -v
 ```
 
-Tests use temporary files and do not make API requests. They cover file discovery, numbered reading, searching, error handling, tool dispatch, and attempts to access files outside the permitted folder.
+The current suite contains **17 tests**, covering:
 
-Three scenarios have also been checked manually through OpenRouter:
+- File discovery, numbered reading, and keyword searching.
+- Common file errors and invalid tool requests.
+- Path traversal and symlink escape checks in the original tools.
+- GitHub repository and issue URL parsing.
+- Issue import using simulated GitHub responses.
+- Archive filtering and rejection of unsafe paths.
+- Rejection of oversized Python files and archives without supported source.
+- Isolation between project-tool instances.
+- Temporary-folder cleanup when an investigation raises an exception.
 
-- An empty-username crash.
-- A discount calculation bug spanning two files.
-- A password-reset report whose relevant code was absent.
+Tests use temporary files and mocked network helpers. They do not contact GitHub or OpenRouter.
 
-These are demonstration checks, not a broad accuracy benchmark.
+### Manual checks completed
 
-## Project files
+- Diagnosed the empty-username crash.
+- Diagnosed the discount bug across two files.
+- Recognised missing authentication code for an unrelated password-reset report.
+- Investigated a public repository through the web interface.
+- Imported a real GitHub issue and used its title and description for investigation.
+
+These checks demonstrate selected behaviours. They are not a broad accuracy benchmark, and the investigation loop’s API handling is not yet comprehensively tested.
+
+## Limits and data handling
+
+| Limit | Current value |
+|---|---:|
+| Model requests per investigation | 8 |
+| Tool calls per investigation | 12 |
+| Web bug-report length | 20,000 characters |
+| Repository archive download | 20 MB |
+| Archive entries | 10,000 |
+| Extracted Python files | 200 |
+| Individual Python file | 100 KB |
+| Total extracted Python source | 5 MB |
+
+File-size limits use decimal bytes.
+
+Only `.py` files are extracted. Hidden paths, selected dependency/cache folders, and archive links are excluded. Unsafe archive paths are rejected.
+
+The downloader records the inspected commit identifier so a result can be associated with a particular snapshot.
+
+**Source returned by tools and bug descriptions are sent to OpenRouter and its selected provider.** File filtering does not guarantee that Python source contains no sensitive information. Use code you are authorised and comfortable sharing.
+
+Downloaded code is read as text, not imported or executed. The application’s own Python code and its dependencies do run locally.
+
+## Project structure
+
+```text
+.
+├── app.py
+├── agent.py
+├── investigate.py
+├── project_tools.py
+├── github_source.py
+├── repository_download.py
+├── tool_specs.py
+├── tools.py
+├── main.py
+├── test_tools.py
+├── test_github.py
+├── requirements.txt
+├── .env.example
+├── .gitignore
+└── sample_project/
+    ├── checkout.py
+    ├── discounts.py
+    ├── profile.py
+    └── registration.py
+```
 
 | File | Purpose |
 |---|---|
-| `investigate.py` | Runs the AI investigation loop. |
-| `tools.py` | Implements file tools, path checks, and tool dispatch. |
-| `tool_specs.py` | Describes the tools and their arguments. |
-| `test_tools.py` | Tests the local tools without API calls. |
-| `main.py` | Earlier manual interface for exploring the tools. |
-| `sample_project/` | Small demonstration project with intentional bugs. |
+| `app.py` | Streamlit interface for GitHub investigations. |
+| `agent.py` | Shared AI conversation loop and progress reporting. |
+| `investigate.py` | Terminal entry point. |
+| `project_tools.py` | File tools restricted to one project folder. |
+| `github_source.py` | GitHub URL parsing and public issue import. |
+| `repository_download.py` | Repository snapshot download, filtering, and cleanup. |
+| `tool_specs.py` | Tool descriptions and argument schemas sent to the model. |
+| `tools.py` | Original tools for the local sample project. |
+| `main.py` | Earlier manual interface for exploring the original tools. |
+| `test_tools.py` | Tests for the original local tools. |
+| `test_github.py` | GitHub import, archive, and project-isolation tests. |
+| `sample_project/` | Small source files containing intentional demonstration bugs. |
 
-## Limitations
+## Known limitations
 
-- Currently restricted to Python files under `sample_project`.
-- Uses `openrouter/free`, so the selected model and results can vary.
-- Free API availability and rate limits can interrupt investigations.
-- Source code returned by tools is sent to OpenRouter and its selected provider. Use demonstration code you are comfortable sharing.
-- The model can make incorrect claims, cite inaccurate lines, or perform unnecessary searches.
-- Suggested fixes and tests require human review.
-- The agent does not run tests, apply patches, or verify its proposed fixes.
-- Path restrictions are a basic access boundary, not a hardened sandbox.
+- Supports public GitHub repositories and Python source only.
+- Instructions encourage evidence-based answers but cannot guarantee them.
+- Search is keyword-based and case-sensitive.
+- Only Python source is extracted, so relevant configuration or documentation may be absent.
+- Free-model availability, model selection, and API rate limits can affect results.
+- Fixes and tests require human review and execution.
+
 
 ## Planned improvements
 
-- Evaluate against a larger set of known bugs.
-- Compare tool-based investigation with sending all source code in one request.
-- Record the selected model and request usage.
 - Test the investigation loop with simulated API responses.
-- Improve handling of redundant tool requests.
+- Evaluate against a larger collection of known bugs and publish the results.
+- Validate reported code references against inspected evidence.
+- Reduce redundant tool calls.

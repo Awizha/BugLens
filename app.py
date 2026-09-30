@@ -8,12 +8,12 @@ from repository_download import downloaded_repository
 
 
 st.set_page_config(
-    page_title="Issue Investigator",
+    page_title="BugLens",
     page_icon="🔎",
     layout="centered",
 )
 
-st.title("Issue Investigator")
+st.title("BugLens")
 st.write(
     "Investigate a bug in a public Python repository "
     "using source-code evidence."
