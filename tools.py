@@ -23,13 +23,7 @@ def read_code(file_path):
         path = checked_path(file_path)
         #read_text method reads a file as a text
         code = path.read_text(encoding="utf-8")
-
-    
-
-
-        
     except FileNotFoundError:
-
         return f"Error: file not found: {file_path}"
     except IsADirectoryError:
         return f"Error: expected a file, but got a folder: {file_path}"
